@@ -1,9 +1,11 @@
 import Layout from '../components/Layout';
 import { useVault } from '../components/useVault';
+import DepositWithdraw from '../components/DepositWithdraw';
 import { formatUnits } from 'viem';
 
 export default function ActivePage() {
-  const { isConnected, vaultStats, userValue, amount, setAmount, handleDeposit, handleWithdraw, status } = useVault();
+  const vaultData = useVault();
+  const { isConnected, vaultStats, userValue } = vaultData;
   const fmt6 = v => v ? Number(formatUnits(v, 6)).toFixed(2) : '0.00';
   const fmt8 = v => v ? Number(formatUnits(v, 8)).toFixed(6) : '0.000000';
 
@@ -63,23 +65,7 @@ export default function ActivePage() {
             <p className="text-3xl font-bold mt-1">{fmt6(userValue)} <span className="text-lg text-gray-300">USDC</span></p>
           </div>
         )}
-        {isConnected ? (
-          <div className="bg-gray-800 rounded-2xl p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">Deposit / Withdraw</p>
-            <input type="number" placeholder="USDC amount (min 1)" value={amount}
-              onChange={e => setAmount(e.target.value)}
-              className="w-full bg-gray-700 rounded-xl px-4 py-3 text-white mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
-            <div className="flex gap-2">
-              <button onClick={handleDeposit} className="flex-1 bg-blue-600 hover:bg-blue-700 rounded-xl py-3 font-semibold transition">Deposit</button>
-              <button onClick={handleWithdraw} className="flex-1 bg-gray-600 hover:bg-gray-500 rounded-xl py-3 font-semibold transition">Withdraw All</button>
-            </div>
-            {status && <p className="mt-3 text-sm text-center text-gray-300">{status}</p>}
-          </div>
-        ) : (
-          <div className="bg-gray-800 rounded-2xl p-5 text-center">
-            <p className="text-gray-400">Connect your wallet to deposit</p>
-          </div>
-        )}
+        <DepositWithdraw useVaultData={vaultData} accentColor="blue" />
       </div>
     </Layout>
   );

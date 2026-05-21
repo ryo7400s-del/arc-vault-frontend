@@ -1,22 +1,21 @@
 import Layout from '../components/Layout';
 import { useVault } from '../components/useVault';
+import DepositWithdraw from '../components/DepositWithdraw';
 import { formatUnits } from 'viem';
 
 export default function DCAPage() {
-  const { isConnected, vaultStats, userValue, amount, setAmount, handleDeposit, handleWithdraw, status } = useVault();
+  const vaultData = useVault();
+  const { isConnected, vaultStats, userValue } = vaultData;
   const fmt6 = v => v ? Number(formatUnits(v, 6)).toFixed(2) : '0.00';
 
   return (
     <Layout>
       <div className="space-y-4">
-        {/* Banner */}
         <div className="bg-gradient-to-r from-purple-600 to-pink-700 rounded-2xl p-5">
           <p className="text-xs text-purple-200 mb-1">DCA STRATEGY</p>
           <h2 className="text-xl font-bold">Fear & Greed DCA</h2>
           <p className="text-purple-200 text-sm mt-1">Buy the fear · Sell the greed · Daily execution</p>
         </div>
-
-        {/* Strategy Rules */}
         <div className="bg-gray-800 rounded-2xl p-5">
           <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">Strategy Rules</p>
           <div className="space-y-3">
@@ -42,8 +41,6 @@ export default function DCAPage() {
             <span>⛏️ Mining cost updated weekly</span>
           </div>
         </div>
-
-        {/* Vault Stats */}
         <div className="bg-gray-800 rounded-2xl p-5">
           <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">Vault Status</p>
           <div className="grid grid-cols-2 gap-3">
@@ -57,33 +54,13 @@ export default function DCAPage() {
             </div>
           </div>
         </div>
-
-        {/* User Position */}
         {isConnected && (
           <div className="bg-gradient-to-r from-purple-900 to-pink-900 rounded-2xl p-5">
             <p className="text-gray-300 text-sm">Your Position</p>
             <p className="text-3xl font-bold mt-1">{fmt6(userValue)} <span className="text-lg text-gray-300">USDC</span></p>
           </div>
         )}
-
-        {/* Deposit/Withdraw */}
-        {isConnected ? (
-          <div className="bg-gray-800 rounded-2xl p-5">
-            <p className="text-xs text-gray-400 uppercase tracking-wider mb-3">Deposit / Withdraw</p>
-            <input type="number" placeholder="USDC amount (min 1)" value={amount}
-              onChange={e => setAmount(e.target.value)}
-              className="w-full bg-gray-700 rounded-xl px-4 py-3 text-white mb-3 outline-none focus:ring-2 focus:ring-purple-500" />
-            <div className="flex gap-2">
-              <button onClick={handleDeposit} className="flex-1 bg-purple-600 hover:bg-purple-700 rounded-xl py-3 font-semibold transition">Deposit</button>
-              <button onClick={handleWithdraw} className="flex-1 bg-gray-600 hover:bg-gray-500 rounded-xl py-3 font-semibold transition">Withdraw All</button>
-            </div>
-            {status && <p className="mt-3 text-sm text-center text-gray-300">{status}</p>}
-          </div>
-        ) : (
-          <div className="bg-gray-800 rounded-2xl p-5 text-center">
-            <p className="text-gray-400">Connect your wallet to deposit</p>
-          </div>
-        )}
+        <DepositWithdraw useVaultData={vaultData} accentColor="purple" />
       </div>
     </Layout>
   );

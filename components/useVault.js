@@ -21,6 +21,7 @@ export const VAULT_ABI = [
 
 export const ERC20_ABI = [
   { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] },
+  { name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ type: 'uint256' }] },
 ];
 
 export function useVault() {
@@ -39,6 +40,12 @@ export function useVault() {
     address: VAULT_ADDRESS, abi: VAULT_ABI, functionName: 'userShares',
     args: [address], enabled: !!address, watch: true,
   });
+  // ウォレットのUSDC残高
+  const { data: walletUSDC } = useReadContract({
+    address: USDC_ADDRESS, abi: ERC20_ABI, functionName: 'balanceOf',
+    args: [address], enabled: !!address, watch: true,
+  });
+
   const { writeContractAsync } = useWriteContract();
 
   const handleDeposit = async () => {
@@ -54,19 +61,22 @@ export function useVault() {
     } catch (e) { setStatus('❌ ' + e.message.slice(0, 80)); }
   };
 
-  const handleWithdraw = async () => {
-    if (!userShares) return;
+  const handleWithdraw = async (pct) => {
+    if (!userShares || !userValue) return;
     try {
       setStatus('⏳ Withdrawing...');
-      await writeContractAsync({ address: VAULT_ADDRESS, abi: VAULT_ABI, functionName: 'withdraw', args: [userShares] });
+      // 一部引き出しの場合はシェアを按分
+      const sharesToWithdraw = pct === 100
+        ? userShares
+        : userShares * BigInt(pct) / 100n;
+      await writeContractAsync({ address: VAULT_ADDRESS, abi: VAULT_ABI, functionName: 'withdraw', args: [sharesToWithdraw] });
       setStatus('✅ Withdrawal successful!');
     } catch (e) { setStatus('❌ ' + e.message.slice(0, 80)); }
   };
 
-  const fmt = (val, dec) => val ? Number(formatUnits(val, dec)).toFixed(dec === 6 ? 2 : 6) : '0.00';
-
   return {
     address, isConnected, vaultStats, userValue, userShares,
-    amount, setAmount, status, handleDeposit, handleWithdraw, fmt,
+    walletUSDC, amount, setAmount, status, setStatus,
+    handleDeposit, handleWithdraw,
   };
 }
