@@ -172,7 +172,7 @@ export default function Home() {
               <p className="font-semibold text-purple-300 mb-2">🧠 Active Strategy: Fear & Greed DCA</p>
               <p className="text-green-400">✅ All-in: Price ≤ $61,884 (Electricity cost)</p>
               <p className="text-green-400">✅ DCA 5%: Price ≤ $74,263 AND F&G ≤ 30</p>
-              <p className="text-green-400">✅ DCA 2%: Price > $74,263 OR F&G < 30</p>
+              <p className="text-green-400">✅ DCA 2%: Price {'>'}  $74,263 OR F&G {'<'} 30</p>
               <p className="text-red-400">✅ Sell: F&G ≥ 75 (Extreme Greed)</p>
               <p className="text-gray-400">⏰ Execution: Every 24 hours</p>
               <p className="text-gray-400">⛏️ Mining cost updated weekly</p>
