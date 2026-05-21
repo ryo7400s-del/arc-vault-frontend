@@ -128,7 +128,7 @@ async function main() {
     }
 
     console.log("\n⏳ 次回実行: 24時間後");
-    setTimeout(run, 24 * 60 * 60 * 1000);
+    // GitHub Actions: 1回実行して終了;
   };
 
   await run();
