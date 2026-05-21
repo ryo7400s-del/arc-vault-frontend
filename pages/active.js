@@ -20,19 +20,19 @@ export default function ActivePage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-gray-700 rounded-xl p-3">
               <p className="text-gray-400 text-xs">USDC</p>
-              <p className="text-xl font-bold">{fmt6(vaultStats?.[0])}</p>
+              <p className="text-xl font-bold">{isConnected ? fmt6(vaultStats?.[0]) : "-.--"}</p>
             </div>
             <div className="bg-gray-700 rounded-xl p-3">
               <p className="text-gray-400 text-xs">cirBTC</p>
-              <p className="text-xl font-bold">{fmt8(vaultStats?.[1])}</p>
+              <p className="text-xl font-bold">{isConnected ? fmt8(vaultStats?.[1]) : "-.------"}</p>
             </div>
             <div className="bg-gray-700 rounded-xl p-3">
               <p className="text-gray-400 text-xs">Trades</p>
-              <p className="text-xl font-bold">{vaultStats?.[3]?.toString() ?? '0'}</p>
+              <p className="text-xl font-bold">{isConnected ? vaultStats?.[3]?.toString() ?? '0' : '-'}</p>
             </div>
             <div className="bg-gray-700 rounded-xl p-3">
               <p className="text-gray-400 text-xs">Position</p>
-              <p className="text-lg font-bold">{vaultStats ? (vaultStats[4] ? '🟠 BTC' : '🟢 USDC') : '-'}</p>
+              <p className="text-lg font-bold">{isConnected ? (vaultStats ? (vaultStats[4] ? '🟠 BTC' : '🟢 USDC') : '-') : '-'}</p>
             </div>
           </div>
         </div>
