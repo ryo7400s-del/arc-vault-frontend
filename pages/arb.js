@@ -186,7 +186,7 @@ export default function ArbPage() {
       analyzing.current = false;
     }, 30000);
     return () => clearInterval(id);
-  }, [running, balances, poolInfo, stablefxRate, trades, mode, log, executeTrade]);
+  }, [running]);
 
   useEffect(() => {
     if (!running || !isConnected) return;
