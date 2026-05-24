@@ -76,7 +76,7 @@ export default function ArbPage() {
   const { data: walletClient } = useWalletClient();
 
   const [running,      setRunning]      = useState(false);
-  const [mode,         setMode]         = useState("balanced");
+  const [mode, setMode] = useState("balanced"); modeRef.current = mode;
   const [balances,     setBalances]     = useState({ usdc: null, eurc: null });
   const [poolInfo,     setPoolInfo]     = useState({ curveRate: null, poolLiqUsdc: null, poolLiqEurc: null, fee: null });
   const [stablefxRate, setStablefxRate] = useState(null);
@@ -88,6 +88,11 @@ export default function ArbPage() {
   const [logs,         setLogs]         = useState([]);
   const [tick,         setTick]         = useState(0);
   const logsEndRef = useRef(null);
+  const balancesRef = useRef({ usdc: null, eurc: null });
+  const poolInfoRef = useRef({ curveRate: null });
+  const stablefxRef = useRef(null);
+  const tradesRef   = useRef([]);
+  const modeRef     = useRef("balanced");
 
   const wrongChain = isConnected && chain?.id !== ARC_CHAIN_ID;
 
@@ -104,7 +109,8 @@ export default function ArbPage() {
           publicClient.readContract({ address: ADDR.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [address] }),
           publicClient.readContract({ address: ADDR.EURC, abi: ERC20_ABI, functionName: "balanceOf", args: [address] }),
         ]);
-        setBalances({ usdc: parseFloat(formatUnits(usdcRaw, 6)), eurc: parseFloat(formatUnits(eurcRaw, 6)) });
+        const b = { usdc: parseFloat(formatUnits(usdcRaw, 6)), eurc: parseFloat(formatUnits(eurcRaw, 6)) };
+        setBalances(b); balancesRef.current = b;
       } catch (e) { log("残高取得エラー: " + e.message.slice(0,60), "err"); }
 
       const amountIn = parseUnits("1000", 6);
@@ -117,9 +123,11 @@ export default function ArbPage() {
       ]);
       const dy = parseFloat(formatUnits(dyRaw, 6));
       const invRate = 1000 / dy;
-      setPoolInfo({ curveRate: invRate, poolLiqUsdc: parseFloat(formatUnits(poolUsdc, 6)),
-        poolLiqEurc: parseFloat(formatUnits(poolEurc, 6)), fee: Number(feeRaw) / 1e10 * 100 });
-      setStablefxRate(invRate + (Math.random() - 0.5) * 0.002);
+      const pi = { curveRate: invRate, poolLiqUsdc: parseFloat(formatUnits(poolUsdc, 6)),
+        poolLiqEurc: parseFloat(formatUnits(poolEurc, 6)), fee: Number(feeRaw) / 1e10 * 100 };
+      setPoolInfo(pi); poolInfoRef.current = pi;
+      const rfq = invRate + (Math.random() - 0.5) * 0.002;
+      setStablefxRate(rfq); stablefxRef.current = rfq;
       setTick(t => t + 1);
     } catch (err) { log("価格取得エラー: " + err.message.slice(0,80), "err"); }
   }, [publicClient, isConnected, address, log]);
@@ -157,7 +165,7 @@ export default function ArbPage() {
       const tradeRec = { id: Date.now(), dir: direction, amount: amountUSDC,
         profit: tradeProfit.toFixed(4), gasUSDC: "~0.001", ok: receipt.status === "success",
         txHash: exchangeTx, ts: new Date().toLocaleTimeString(), block: receipt.blockNumber?.toString() };
-      setTrades(t => [tradeRec, ...t.slice(0,49)]);
+      setTrades(t => { const next = [tradeRec, ...t.slice(0,49)]; tradesRef.current = next; return next; });
       if (receipt.status === "success") {
         setProfit(p => p + tradeProfit);
         log(`✓ ${exchangeTx.slice(0,14)}… profit:+${tradeProfit.toFixed(4)} USDC`, "ok");
@@ -174,9 +182,9 @@ export default function ArbPage() {
       analyzing.current = true;
       log("AI 分析中…", "info");
       try {
-        const decision = await askAI({ usdcBalance: balances.usdc?.toFixed(2)??"0",
-          eurcBalance: balances.eurc?.toFixed(2)??"0", curveRate: poolInfo.curveRate,
-          stablefxRate, recentTrades: trades, mode });
+        const decision = await askAI({ usdcBalance: balancesRef.current.usdc?.toFixed(2)??"0",
+          eurcBalance: balancesRef.current.eurc?.toFixed(2)??"0", curveRate: poolInfoRef.current.curveRate,
+          stablefxRate: stablefxRef.current, recentTrades: tradesRef.current, mode: modeRef.current });
         setAi(decision);
         log(`AI → ${decision.action} [${Math.round((decision.confidence||0)*100)}%]: ${decision.reason}`,
           decision.action==="TRADE"?"trade":"info");
