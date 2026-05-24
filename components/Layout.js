@@ -1,3 +1,4 @@
+cat > components/Layout.js << 'EOF'
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
@@ -10,14 +11,14 @@ export default function Layout({ children }) {
   const navItems = [
     { href: '/active', label: 'Active Strategy', icon: '📈', desc: 'Taker + RSI AI Trading' },
     { href: '/dca', label: 'DCA Strategy', icon: '😱', desc: 'Fear & Greed DCA' },
-    { href: '/perp', label: 'Perp Trading', icon: '🔮', desc: 'Coming Soon' },
+    { href: '/arb', label: 'ARB Agent', icon: '⚡', desc: 'EURC/USDC Arbitrage' },
     { href: '/dashboard', label: 'Dashboard', icon: '📊', desc: 'Your Portfolio' },
   ];
 
   const bottomNav = [
     { href: '/active', icon: '📈', label: 'Active' },
     { href: '/dca', icon: '😱', label: 'DCA' },
-    { href: '/perp', icon: '🔮', label: 'Perp' },
+    { href: '/arb', icon: '⚡', label: 'ARB' },
     { href: '/dashboard', icon: '📊', label: 'Dashboard' },
   ];
 
@@ -120,3 +121,5 @@ export default function Layout({ children }) {
     </div>
   );
 }
+EOF
+
