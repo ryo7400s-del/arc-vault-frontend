@@ -47,12 +47,10 @@ export default function Layout({ children }) {
       {/* Slide-in Menu */}
       {menuOpen && (
         <div className="fixed inset-0 z-30 flex">
-          {/* Overlay */}
           <div
             className="absolute inset-0 bg-black bg-opacity-60"
             onClick={() => setMenuOpen(false)}
           />
-          {/* Menu Panel */}
           <div className="relative w-72 bg-gray-900 h-full flex flex-col z-40 shadow-2xl">
             <div className="flex justify-between items-center p-5 border-b border-gray-800">
               <h2 className="text-lg font-bold">🤖 Arc Agent Vault</h2>
@@ -120,5 +118,3 @@ export default function Layout({ children }) {
     </div>
   );
 }
-EOF
-
