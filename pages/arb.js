@@ -184,7 +184,7 @@ export default function ArbPage() {
           await executeTrade(decision.direction, decision.amountUSDC, decision.slippageBps??50);
       } catch (err) { log("AI エラー: " + err.message, "err"); }
       analyzing.current = false;
-    }, 18000);
+    }, 30000);
     return () => clearInterval(id);
   }, [running, balances, poolInfo, stablefxRate, trades, mode, log, executeTrade]);
 
