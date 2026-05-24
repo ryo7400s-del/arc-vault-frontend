@@ -81,8 +81,8 @@ export default function ArbPage() {
   const [poolInfo,     setPoolInfo]     = useState({ curveRate: null, poolLiqUsdc: null, poolLiqEurc: null, fee: null });
   const [stablefxRate, setStablefxRate] = useState(null);
   const [ai,           setAi]           = useState(null);
-  const [analyzing,    setAnalyzing]    = useState(false);
-  const [executing,    setExecuting]    = useState(false);
+  const analyzing = useRef(false);
+  const executing = useRef(false);
   const [trades,       setTrades]       = useState([]);
   const [profit,       setProfit]       = useState(0);
   const [logs,         setLogs]         = useState([]);
@@ -125,8 +125,8 @@ export default function ArbPage() {
   }, [publicClient, isConnected, address, log]);
 
   const executeTrade = useCallback(async (direction, amountUSDC, slippageBps) => {
-    if (!walletClient || !address || executing) return;
-    setExecuting(true);
+    if (!walletClient || !address || executing.current) return;
+    executing.current = true;
     try {
       const isUsdcToEurc = direction === "BUY_EURC_ON_CURVE";
       const tokenIn = isUsdcToEurc ? ADDR.USDC : ADDR.EURC;
@@ -163,15 +163,15 @@ export default function ArbPage() {
         log(`✓ ${exchangeTx.slice(0,14)}… profit:+${tradeProfit.toFixed(4)} USDC`, "ok");
       } else { log("✗ TX reverted", "err"); }
     } catch (err) { log("取引エラー: " + (err.shortMessage||err.message).slice(0,80), "err"); }
-    setExecuting(false);
-  }, [walletClient, address, executing, publicClient, fetchChainData, log]);
+    executing.current = false;
+  }, [walletClient, address, publicClient, fetchChainData, log]);
 
   useEffect(() => {
     if (!running) return;
     log("AI ループ開始 (18秒周期)", "sys");
     const id = setInterval(async () => {
-      if (analyzing || executing) return;
-      setAnalyzing(true);
+      if (analyzing.current || executing.current) return;
+      analyzing.current = true;
       log("AI 分析中…", "info");
       try {
         const decision = await askAI({ usdcBalance: balances.usdc?.toFixed(2)??"0",
@@ -183,10 +183,10 @@ export default function ArbPage() {
         if (decision.action==="TRADE" && mode!=="manual" && decision.amountUSDC>0)
           await executeTrade(decision.direction, decision.amountUSDC, decision.slippageBps??50);
       } catch (err) { log("AI エラー: " + err.message, "err"); }
-      setAnalyzing(false);
+      analyzing.current = false;
     }, 18000);
     return () => clearInterval(id);
-  }, [running, analyzing, executing, balances, poolInfo, stablefxRate, trades, mode, log, executeTrade]);
+  }, [running, balances, poolInfo, stablefxRate, trades, mode, log, executeTrade]);
 
   useEffect(() => {
     if (!running || !isConnected) return;
@@ -312,8 +312,8 @@ export default function ArbPage() {
                       {ai.action}
                     </span>
                     {ai.confidence>0 && <span className="text-green-400 text-[10px]">信頼度 {Math.round(ai.confidence*100)}%</span>}
-                    {analyzing && <span className="text-indigo-400 text-[10px] animate-pulse">⟳ 再分析…</span>}
-                    {executing && <span className="text-yellow-400 text-[10px] animate-pulse">⚡ 実行中…</span>}
+                    {analyzing.current && <span className="text-indigo-400 text-[10px] animate-pulse">⟳ 再分析…</span>}
+                    {executing.current && <span className="text-yellow-400 text-[10px] animate-pulse">⚡ 実行中…</span>}
                   </div>
                   {ai.action==="TRADE" && (
                     <div className="bg-gray-950 border border-gray-800 rounded p-3 space-y-1">
@@ -333,7 +333,7 @@ export default function ArbPage() {
                   <div className="text-gray-600 text-[11px] italic">"{ai.reason}"</div>
                   {mode==="manual" && ai.action==="TRADE" && (
                     <button onClick={() => executeTrade(ai.direction, ai.amountUSDC, ai.slippageBps??50)}
-                      disabled={executing||!isConnected}
+                      disabled={executing.current||!isConnected}
                       className="w-full py-2 bg-yellow-950 hover:bg-yellow-900 border border-yellow-800 text-yellow-400 rounded text-xs font-bold disabled:opacity-40">
                       ⚡ 手動実行
                     </button>
