@@ -1,7 +1,7 @@
 name: Arb Cron
 on:
   schedule:
-    - cron: '* * * * *'
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,3 +13,4 @@ jobs:
           curl -X GET \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             https://arc-vault-frontend.vercel.app/api/cron
+          echo "Done"
