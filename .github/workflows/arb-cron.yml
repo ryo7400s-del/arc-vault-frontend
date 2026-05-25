@@ -12,5 +12,5 @@ jobs:
         run: |
           curl -X GET \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://arc-vault-frontend-v2.vercel.app/api/cron
+            https://arc-vault-frontend.vercel.app/api/cron
           echo "Done"
