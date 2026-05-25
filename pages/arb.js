@@ -135,50 +135,68 @@ export default function ArbPage() {
     }
   }, [publicClient, isConnected, address, log]);
 
+  const ARB_CONTRACT = "0x86eef741459bf0e6c765114fd578f30b3c053d28";
+  const ARB_ABI = [
+    { name: "execute", type: "function", stateMutability: "nonpayable",
+      inputs: [{ name: "direction", type: "uint8" },{ name: "amountIn", type: "uint256" },{ name: "minAmountOut", type: "uint256" }],
+      outputs: [{ name: "amountOut", type: "uint256" }] },
+    { name: "getQuote", type: "function", stateMutability: "view",
+      inputs: [{ name: "direction", type: "uint8" },{ name: "amountIn", type: "uint256" }],
+      outputs: [{ name: "", type: "uint256" }] },
+  ];
+
+  const approveIfNeeded = useCallback(async (tokenAddr) => {
+    const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+    const allowance = await publicClient.readContract({
+      address: tokenAddr, abi: ERC20_ABI, functionName: "allowance",
+      args: [address, ARB_CONTRACT],
+    });
+    if (allowance < parseUnits("1000000", 6)) {
+      log("初回 Approve 中…(1回のみ)", "trade");
+      const tx = await walletClient.writeContract({
+        address: tokenAddr, abi: ERC20_ABI, functionName: "approve",
+        args: [ARB_CONTRACT, MAX],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: tx });
+      log("Approve ✓ (次回から不要)", "ok");
+    }
+  }, [publicClient, walletClient, address, log]);
+
   const executeTrade = useCallback(async (direction, amountUSDC, slippageBps) => {
     if (!walletClient || !address || executingRef.current) return;
     executingRef.current = true;
     try {
       const isBuy = direction === "BUY_EURC_ON_CURVE";
       const tokenIn = isBuy ? ADDR.USDC : ADDR.EURC;
-      const coinI   = isBuy ? COIN_INDEX.USDC : COIN_INDEX.EURC;
-      const coinJ   = isBuy ? COIN_INDEX.EURC : COIN_INDEX.USDC;
       const amtRaw  = parseUnits(amountUSDC.toString(), 6);
-      log(`Approve ${isBuy?"USDC":"EURC"} → Curve…`, "trade");
-      const aTx = await walletClient.writeContract({
-        address: tokenIn, abi: ERC20_ABI, functionName: "approve",
-        args: [ADDR.CURVE_POOL, amtRaw],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: aTx });
-      log(`Approve ✓`, "ok");
+      const dir     = isBuy ? 0 : 1;
+      await approveIfNeeded(tokenIn);
       const expOut = await publicClient.readContract({
-        address: ADDR.CURVE_POOL, abi: CURVE_ABI, functionName: "get_dy",
-        args: [coinI, coinJ, amtRaw],
+        address: ARB_CONTRACT, abi: ARB_ABI, functionName: "getQuote",
+        args: [dir, amtRaw],
       });
-      const minDy = expOut * BigInt(10000 - slippageBps) / 10000n;
-      log(`Exchange ${amountUSDC} ${isBuy?"USDC→EURC":"EURC→USDC"}…`, "trade");
-      const eTx = await walletClient.writeContract({
-        address: ADDR.CURVE_POOL, abi: CURVE_ABI, functionName: "exchange",
-        args: [coinI, coinJ, amtRaw, minDy],
+      const minOut = expOut * BigInt(10000 - slippageBps) / 10000n;
+      log(\`execute() \${amountUSDC} \${isBuy?"USDC→EURC":"EURC→USDC"} via ArbExecutor…\`, "trade");
+      const tx = await walletClient.writeContract({
+        address: ARB_CONTRACT, abi: ARB_ABI, functionName: "execute",
+        args: [dir, amtRaw, minOut],
       });
-      const receipt = await publicClient.waitForTransactionReceipt({ hash: eTx });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
       await fetchChainData();
-      const p = parseFloat(formatUnits(expOut,6)) - amountUSDC;
+      const p = parseFloat(formatUnits(expOut, 6)) - amountUSDC;
       const rec = { id: Date.now(), dir: direction, amount: amountUSDC,
         profit: p.toFixed(4), ok: receipt.status==="success",
-        txHash: eTx, ts: new Date().toLocaleTimeString(), block: receipt.blockNumber?.toString() };
+        txHash: tx, ts: new Date().toLocaleTimeString(), block: receipt.blockNumber?.toString() };
       setTrades(t => [rec, ...t.slice(0,49)]);
       if (receipt.status==="success") {
         setProfit(pr => pr+p);
-        log(`✓ ${eTx.slice(0,12)}… +${p.toFixed(4)} USDC`, "ok");
-      } else {
-        log("✗ reverted", "err");
-      }
+        log(\`✓ \${tx.slice(0,12)}… +\${p.toFixed(4)} USDC\`, "ok");
+      } else { log("✗ reverted", "err"); }
     } catch(err) {
       log("取引エラー: "+(err.shortMessage||err.message).slice(0,80), "err");
     }
     executingRef.current = false;
-  }, [walletClient, address, publicClient, fetchChainData, log]);
+  }, [walletClient, address, publicClient, fetchChainData, log, approveIfNeeded]);
 
   // AI loop - deps=[running] only to prevent restart
   useEffect(() => {
