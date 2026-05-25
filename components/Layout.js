@@ -11,6 +11,7 @@ export default function Layout({ children }) {
     { href: '/active', label: 'Active Strategy', icon: '📈', desc: 'Taker + RSI AI Trading' },
     { href: '/dca', label: 'DCA Strategy', icon: '😱', desc: 'Fear & Greed DCA' },
     { href: '/arb', label: 'ARB Agent', icon: '⚡', desc: 'EURC/USDC Arbitrage' },
+    { href: '/vault', label: 'ARB Vault', icon: '🏦', desc: 'Deposit & Earn' },
     { href: '/dashboard', label: 'Dashboard', icon: '📊', desc: 'Your Portfolio' },
   ];
 
@@ -18,6 +19,7 @@ export default function Layout({ children }) {
     { href: '/active', icon: '📈', label: 'Active' },
     { href: '/dca', icon: '😱', label: 'DCA' },
     { href: '/arb', icon: '⚡', label: 'ARB' },
+    { href: '/vault', icon: '🏦', label: 'Vault' },
     { href: '/dashboard', icon: '📊', label: 'Dashboard' },
   ];
 
