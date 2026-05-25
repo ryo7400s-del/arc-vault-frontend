@@ -176,7 +176,7 @@ export default function ArbPage() {
         args: [dir, amtRaw],
       });
       const minOut = expOut * BigInt(10000 - slippageBps) / 10000n;
-      log(\`execute() \${amountUSDC} \${isBuy?"USDC→EURC":"EURC→USDC"} via ArbExecutor…\`, "trade");
+      log(`execute() ${amountUSDC} ${isBuy?"USDC->EURC":"EURC->USDC"} via ArbExecutor...`, "trade");
       const tx = await walletClient.writeContract({
         address: ARB_CONTRACT, abi: ARB_ABI, functionName: "execute",
         args: [dir, amtRaw, minOut],
@@ -190,7 +190,7 @@ export default function ArbPage() {
       setTrades(t => [rec, ...t.slice(0,49)]);
       if (receipt.status==="success") {
         setProfit(pr => pr+p);
-        log(\`✓ \${tx.slice(0,12)}… +\${p.toFixed(4)} USDC\`, "ok");
+        log(`✓ \${tx.slice(0,12)}… +\${p.toFixed(4)} USDC`, "ok");
       } else { log("✗ reverted", "err"); }
     } catch(err) {
       log("取引エラー: "+(err.shortMessage||err.message).slice(0,80), "err");
