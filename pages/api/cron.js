@@ -75,7 +75,7 @@ or
         messages: [{ role: "user", content: prompt }] }),
     });
     const data = await res.json();
-    l(`Groq raw: ${JSON.stringify(data).slice(0,200)}`); const text = data.choices?.[0]?.message?.content || "{}";
+    const text = data.choices?.[0]?.message?.content || "{}";
     return JSON.parse(text.replace(/```json|```/g,"").trim());
   } catch(e) {
     return { action: "WAIT", reason: "AI error: " + e.message };
