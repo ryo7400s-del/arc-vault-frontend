@@ -7,7 +7,8 @@ const ARC_CHAIN_ID = 5042002;
 
 const ADDR = {
   USDC:      "0x3600000000000000000000000000000000000000",
-  ARB_VAULT: "0x53dbf84e7ff49a94e133faf6eec5050299d3a98d",
+  EURC:      "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
+  ARB_VAULT: "0x43b063f897c18558978739d1e5320ff4e6df58ec",
 };
 
 const ERC20_ABI = [
@@ -42,6 +43,9 @@ const VAULT_ABI = [
     ] },
   { name: "getEURCBalance", type: "function", stateMutability: "view",
     inputs: [], outputs: [{ name: "", type: "uint256" }] },
+  { name: "depositEURC", type: "function", stateMutability: "nonpayable",
+    inputs: [{ name: "eurcAmount", type: "uint256" },{ name: "minUSDC", type: "uint256" }],
+    outputs: [] },
 ];
 
 export default function VaultPage() {
@@ -58,6 +62,8 @@ export default function VaultPage() {
   const [loading,    setLoading]   = useState(false);
   const [status,     setStatus]    = useState(null);
   const [logs,       setLogs]      = useState([]);
+  const [eurcAmount, setEurcAmount] = useState("");
+  const [eurcWalletBal, setEurcWalletBal] = useState(null);
 
   const wrongChain = isConnected && chain?.id !== ARC_CHAIN_ID;
 
@@ -69,15 +75,17 @@ export default function VaultPage() {
   const fetchData = useCallback(async () => {
     if (!publicClient || !address) return;
     try {
-      const [uR, uv, vi, er] = await Promise.all([
+      const [uR, uv, vi, er, ewR] = await Promise.all([
         publicClient.readContract({ address: ADDR.USDC, abi: ERC20_ABI, functionName: "balanceOf", args: [address] }),
         publicClient.readContract({ address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "getUserValue", args: [address] }),
         publicClient.readContract({ address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "getVaultInfo" }),
         publicClient.readContract({ address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "getEURCBalance" }),
+        publicClient.readContract({ address: ADDR.EURC, abi: ERC20_ABI, functionName: "balanceOf", args: [address] }),
       ]);
       setUsdcBal(parseFloat(formatUnits(uR, 6)));
       setUserValue(parseFloat(formatUnits(uv, 6)));
       setEurcBal(parseFloat(formatUnits(er, 6)));
+      setEurcWalletBal(parseFloat(formatUnits(ewR, 6)));
       setVaultInfo({
         totalAssets:   parseFloat(formatUnits(vi[0], 6)),
         totalShares:   parseFloat(formatUnits(vi[1], 6)),
@@ -125,6 +133,47 @@ export default function VaultPage() {
         log(`✓ ${amount} USDC 預け入れ完了`, "ok");
         setStatus({ ok: true, msg: `${amount} USDC を預けました` });
         setAmount("");
+        await fetchData();
+      }
+    } catch(e) {
+      log("エラー: " + (e.shortMessage||e.message).slice(0,80), "err");
+      setStatus({ ok: false, msg: e.shortMessage||e.message });
+    }
+    setLoading(false);
+  };
+
+
+  const handleDepositEURC = async () => {
+    if (!walletClient || !eurcAmount) return;
+    setLoading(true);
+    setStatus(null);
+    try {
+      const amtRaw = parseUnits(eurcAmount, 6);
+      const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+      const allowance = await publicClient.readContract({
+        address: ADDR.EURC, abi: ERC20_ABI, functionName: "allowance",
+        args: [address, ADDR.ARB_VAULT],
+      });
+      if (allowance < amtRaw) {
+        log("EURC Approve 中...", "info");
+        const aTx = await walletClient.writeContract({
+          address: ADDR.EURC, abi: ERC20_ABI, functionName: "approve",
+          args: [ADDR.ARB_VAULT, MAX],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: aTx });
+        log("Approve 完了", "ok");
+      }
+      const minUSDC = amtRaw * 95n / 100n;
+      log(`${eurcAmount} EURC を USDC に変換して預け入れ中...`, "info");
+      const tx = await walletClient.writeContract({
+        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "depositEURC",
+        args: [amtRaw, minUSDC],
+      });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+      if (receipt.status === "success") {
+        log(`✓ ${eurcAmount} EURC を預けました (USDC に変換済み)`, "ok");
+        setStatus({ ok: true, msg: `${eurcAmount} EURC を USDC に変換して預けました` });
+        setEurcAmount("");
         await fetchData();
       }
     } catch(e) {
@@ -210,7 +259,7 @@ export default function VaultPage() {
 
           <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
             <div className="flex gap-2 mb-4">
-              {[["deposit","預ける"],["withdraw","引き出す"]].map(([t,label]) => (
+              {[["deposit","預ける(USDC)"],["eurc","預ける(EURC)"],["withdraw","引き出す"]].map(([t,label]) => (
                 <button key={t} onClick={() => setTab(t)}
                   className={`px-4 py-1.5 rounded text-xs font-bold tracking-widest border transition-colors
                     ${tab===t ? "border-green-500 bg-green-950 text-green-400" : "border-gray-800 text-gray-600"}`}>
