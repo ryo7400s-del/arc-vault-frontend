@@ -4,6 +4,8 @@ import { useAccount, usePublicClient, useWalletClient } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 
 const ARC_CHAIN_ID = 5042002;
+const SEPOLIA_CHAIN_ID = 11155111;
+
 const ADDR = {
   USDC:      "0x3600000000000000000000000000000000000000",
   EURC:      "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",
@@ -47,6 +49,14 @@ const VAULT_ABI = [
     outputs: [] },
 ];
 
+function validateAmount(value, balance, label) {
+  const n = parseFloat(value);
+  if (isNaN(n) || n <= 0) return `${label}の量を入力してください`;
+  if (balance !== null && n > balance) return `残高不足 (残高: ${balance.toFixed(2)})`;
+  if (n < 0.000001) return "最小量は 0.000001 です";
+  return null;
+}
+
 export default function VaultPage() {
   const { address, isConnected, chain } = useAccount();
   const publicClient = usePublicClient();
@@ -66,8 +76,11 @@ export default function VaultPage() {
   const [cctpAmount,    setCctpAmount]   = useState("");
   const [cctpLoading,   setCctpLoading]  = useState(false);
   const [cctpStep,      setCctpStep]     = useState(null);
+  const [inputError,    setInputError]   = useState(null);
 
+  const onArcChain = isConnected && chain?.id === ARC_CHAIN_ID;
   const wrongChain = isConnected && chain?.id !== ARC_CHAIN_ID;
+  const onSepolia  = isConnected && chain?.id === SEPOLIA_CHAIN_ID;
 
   const log = useCallback((msg, type = "info") => {
     const ts = new Date().toLocaleTimeString("ja-JP");
@@ -102,15 +115,16 @@ export default function VaultPage() {
   }, [publicClient, address, log]);
 
   useEffect(() => {
-    if (isConnected && !wrongChain) fetchData();
-  }, [isConnected, wrongChain, fetchData]);
+    if (onArcChain) fetchData();
+  }, [onArcChain, fetchData]);
 
   const handleDeposit = async () => {
-    if (!walletClient || !amount) return;
-    setLoading(true); setStatus(null);
+    const err = validateAmount(amount, usdcBal, "USDC");
+    if (err) { setInputError(err); return; }
+    if (!walletClient || !onArcChain) return;
+    setInputError(null); setLoading(true); setStatus(null);
     try {
       const amtRaw = parseUnits(amount, 6);
-      const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
       const allowance = await publicClient.readContract({
         address: ADDR.USDC, abi: ERC20_ABI, functionName: "allowance",
         args: [address, ADDR.ARB_VAULT],
@@ -119,7 +133,7 @@ export default function VaultPage() {
         log("USDC Approve 中...", "info");
         const aTx = await walletClient.writeContract({
           address: ADDR.USDC, abi: ERC20_ABI, functionName: "approve",
-          args: [ADDR.ARB_VAULT, MAX],
+          args: [ADDR.ARB_VAULT, amtRaw],
         });
         await publicClient.waitForTransactionReceipt({ hash: aTx });
         log("Approve 完了", "ok");
@@ -134,6 +148,8 @@ export default function VaultPage() {
         log(`✓ ${amount} USDC 預け入れ完了`, "ok");
         setStatus({ ok: true, msg: `${amount} USDC を預けました` });
         setAmount(""); await fetchData();
+      } else {
+        throw new Error("トランザクションが失敗しました");
       }
     } catch(e) {
       log("エラー: " + (e.shortMessage || e.message).slice(0, 80), "err");
@@ -141,12 +157,14 @@ export default function VaultPage() {
     }
     setLoading(false);
   };
+
   const handleDepositEURC = async () => {
-    if (!walletClient || !eurcAmount) return;
-    setLoading(true); setStatus(null);
+    const err = validateAmount(eurcAmount, eurcWalletBal, "EURC");
+    if (err) { setInputError(err); return; }
+    if (!walletClient || !onArcChain) return;
+    setInputError(null); setLoading(true); setStatus(null);
     try {
       const amtRaw = parseUnits(eurcAmount, 6);
-      const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
       const allowance = await publicClient.readContract({
         address: ADDR.EURC, abi: ERC20_ABI, functionName: "allowance",
         args: [address, ADDR.ARB_VAULT],
@@ -155,7 +173,7 @@ export default function VaultPage() {
         log("EURC Approve 中...", "info");
         const aTx = await walletClient.writeContract({
           address: ADDR.EURC, abi: ERC20_ABI, functionName: "approve",
-          args: [ADDR.ARB_VAULT, MAX],
+          args: [ADDR.ARB_VAULT, amtRaw],
         });
         await publicClient.waitForTransactionReceipt({ hash: aTx });
         log("Approve 完了", "ok");
@@ -168,9 +186,11 @@ export default function VaultPage() {
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
       if (receipt.status === "success") {
-        log(`✓ ${eurcAmount} EURC を預けました (USDC に変換済み)`, "ok");
+        log(`✓ ${eurcAmount} EURC を預けました`, "ok");
         setStatus({ ok: true, msg: `${eurcAmount} EURC を USDC に変換して預けました` });
         setEurcAmount(""); await fetchData();
+      } else {
+        throw new Error("トランザクションが失敗しました");
       }
     } catch(e) {
       log("エラー: " + (e.shortMessage || e.message).slice(0, 80), "err");
@@ -178,10 +198,10 @@ export default function VaultPage() {
     }
     setLoading(false);
   };
-
   const handleWithdrawAll = async () => {
-    if (!walletClient) return;
-    setLoading(true); setStatus(null);
+    if (!walletClient || !onArcChain) return;
+    if ((userValue ?? 0) <= 0) { setInputError("引き出せる残高がありません"); return; }
+    setInputError(null); setLoading(true); setStatus(null);
     try {
       log("全額引き出し中...", "info");
       const tx = await walletClient.writeContract({
@@ -193,6 +213,8 @@ export default function VaultPage() {
         log("✓ 引き出し完了", "ok");
         setStatus({ ok: true, msg: "全額引き出しました" });
         await fetchData();
+      } else {
+        throw new Error("トランザクションが失敗しました");
       }
     } catch(e) {
       log("エラー: " + (e.shortMessage || e.message).slice(0, 80), "err");
@@ -202,15 +224,19 @@ export default function VaultPage() {
   };
 
   const handleCctpDeposit = async () => {
-    if (!cctpAmount || !walletClient) return;
-    const privateKey = prompt("秘密鍵を入力してください (0x...)");
-    if (!privateKey) return;
-    setCctpLoading(true); setCctpStep("🌉 ブリッジ開始...");
+    const err = validateAmount(cctpAmount, null, "USDC");
+    if (err) { setInputError(err); return; }
+    if (!walletClient) return;
+    if (!onSepolia) {
+      setInputError("Ethereum Sepolia に切り替えてからブリッジしてください");
+      return;
+    }
+    setInputError(null); setCctpLoading(true); setCctpStep("🌉 ブリッジ開始...");
     try {
       const { AppKit } = await import("@circle-fin/app-kit");
-      const { createViemAdapterFromPrivateKey } = await import("@circle-fin/adapter-viem-v2");
+      const { createViemAdapterFromWalletClient } = await import("@circle-fin/adapter-viem-v2");
       const kit = new AppKit();
-      const adapter = createViemAdapterFromPrivateKey({ privateKey });
+      const adapter = createViemAdapterFromWalletClient({ walletClient });
       kit.on("approve", () => { setCctpStep("✅ Approve完了"); log("CCTP Approve完了", "ok"); });
       kit.on("burn",    () => { setCctpStep("🔥 Burn完了 (Attestation待ち...)"); log("CCTP Burn完了", "ok"); });
       kit.on("attest",  () => { setCctpStep("📜 Attestation取得済み"); log("Attestation取得", "ok"); });
@@ -223,17 +249,17 @@ export default function VaultPage() {
       });
       log("Vault Deposit中...", "info");
       const amtRaw = parseUnits(cctpAmount, 6);
-      const MAX = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
       const aTx = await walletClient.writeContract({
         address: ADDR.USDC, abi: ERC20_ABI, functionName: "approve",
-        args: [ADDR.ARB_VAULT, MAX],
+        args: [ADDR.ARB_VAULT, amtRaw],
       });
       await publicClient.waitForTransactionReceipt({ hash: aTx });
       const tx = await walletClient.writeContract({
         address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "deposit",
         args: [amtRaw],
       });
-      await publicClient.waitForTransactionReceipt({ hash: tx });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
+      if (receipt.status !== "success") throw new Error("Vault depositが失敗しました");
       setCctpStep("🎉 完了！Vaultに預け入れました");
       log(`✓ CCTPデポジット完了: ${cctpAmount} USDC`, "ok");
       setStatus({ ok: true, msg: `${cctpAmount} USDC を他チェーンからDeposit完了` });
@@ -250,9 +276,14 @@ export default function VaultPage() {
     <>
       <Head><title>ARB Vault</title></Head>
       <div className="min-h-screen bg-gray-950 text-gray-300 font-mono text-xs">
-        {wrongChain && (
+        {wrongChain && tab !== "cctp" && (
           <div className="bg-red-950 border-b border-red-800 px-4 py-2 text-red-300">
             Arc Testnet (5042002) に切り替えてください
+          </div>
+        )}
+        {tab === "cctp" && isConnected && !onSepolia && (
+          <div className="bg-yellow-950 border-b border-yellow-800 px-4 py-2 text-yellow-300">
+            CCTPブリッジには Ethereum Sepolia への切り替えが必要です
           </div>
         )}
         <div className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3">
@@ -300,7 +331,7 @@ export default function VaultPage() {
                 ["cctp",     "🌉 他チェーンから"],
                 ["withdraw", "引き出す"],
               ].map(([t, label]) => (
-                <button key={t} onClick={() => setTab(t)}
+                <button key={t} onClick={() => { setTab(t); setInputError(null); setStatus(null); }}
                   className={`px-4 py-1.5 rounded text-xs font-bold tracking-widest border transition-colors
                     ${tab === t
                       ? t === "cctp"
@@ -311,17 +342,22 @@ export default function VaultPage() {
                 </button>
               ))}
             </div>
+            {inputError && (
+              <div className="mb-3 p-2 rounded border border-orange-800 bg-orange-950 text-orange-300 text-[11px]">
+                ⚠ {inputError}
+              </div>
+            )}
             {tab === "deposit" && (
               <div className="space-y-3">
                 <div className="text-gray-600 text-[11px]">USDCを預けてアービトラージ利益を自動で受け取れます。</div>
                 <div className="flex gap-2">
-                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-                    placeholder="預ける USDC 量"
+                  <input type="number" value={amount} onChange={e => { setAmount(e.target.value); setInputError(null); }}
+                    placeholder="預ける USDC 量" min="0"
                     className="flex-1 bg-gray-950 border border-gray-800 rounded px-3 py-2 text-gray-300 text-xs focus:outline-none focus:border-green-700" />
-                  <button onClick={() => setAmount(usdcBal?.toFixed(2) ?? "0")}
+                  <button onClick={() => setAmount(usdcBal?.toFixed(6) ?? "0")}
                     className="px-3 py-2 bg-gray-800 text-gray-400 rounded text-xs hover:bg-gray-700">MAX</button>
                 </div>
-                <button onClick={handleDeposit} disabled={loading || !amount || !isConnected}
+                <button onClick={handleDeposit} disabled={loading || !amount || !isConnected || !onArcChain}
                   className="w-full py-3 bg-green-950 hover:bg-green-900 border border-green-800 text-green-400 rounded text-xs font-bold tracking-widest disabled:opacity-40 transition-colors">
                   {loading ? "処理中..." : "⬇ 預ける (Deposit)"}
                 </button>
@@ -332,13 +368,13 @@ export default function VaultPage() {
                 <div className="text-gray-600 text-[11px]">EURCを預けます。自動でUSDCに変換されます。</div>
                 <div className="text-gray-700 text-[10px]">ウォレット EURC残高: {eurcWalletBal != null ? eurcWalletBal.toFixed(2) : "—"}</div>
                 <div className="flex gap-2">
-                  <input type="number" value={eurcAmount} onChange={e => setEurcAmount(e.target.value)}
-                    placeholder="預ける EURC 量"
+                  <input type="number" value={eurcAmount} onChange={e => { setEurcAmount(e.target.value); setInputError(null); }}
+                    placeholder="預ける EURC 量" min="0"
                     className="flex-1 bg-gray-950 border border-gray-800 rounded px-3 py-2 text-gray-300 text-xs focus:outline-none focus:border-yellow-700" />
-                  <button onClick={() => setEurcAmount(eurcWalletBal != null ? eurcWalletBal.toFixed(2) : "0")}
+                  <button onClick={() => setEurcAmount(eurcWalletBal != null ? eurcWalletBal.toFixed(6) : "0")}
                     className="px-3 py-2 bg-gray-800 text-gray-400 rounded text-xs hover:bg-gray-700">MAX</button>
                 </div>
-                <button onClick={handleDepositEURC} disabled={loading || !eurcAmount || !isConnected}
+                <button onClick={handleDepositEURC} disabled={loading || !eurcAmount || !isConnected || !onArcChain}
                   className="w-full py-3 bg-yellow-950 hover:bg-yellow-900 border border-yellow-800 text-yellow-400 rounded text-xs font-bold tracking-widest disabled:opacity-40 transition-colors">
                   {loading ? "処理中..." : "⬇ EURC を預ける"}
                 </button>
@@ -348,11 +384,12 @@ export default function VaultPage() {
               <div className="space-y-3">
                 <div className="text-gray-600 text-[11px]">Ethereum SepoliaのUSDCをCCTPでブリッジして、そのままVaultに預けます。</div>
                 <div className="bg-gray-950 border border-gray-800 rounded p-2 text-[10px] text-gray-600 space-y-0.5">
-                  <div>① Sepolia USDC → ARC Testnet (CCTP V2 Fast Transfer)</div>
-                  <div>② ARC上で自動的にVaultへDeposit</div>
+                  <div>① MetaMaskをEthereum Sepoliaに切り替える</div>
+                  <div>② USDC量を入力してブリッジ実行</div>
+                  <div>③ ARC Testnetへ自動でDeposit</div>
                 </div>
-                <input type="number" value={cctpAmount} onChange={e => setCctpAmount(e.target.value)}
-                  placeholder="送る USDC 量 (Sepolia)"
+                <input type="number" value={cctpAmount} onChange={e => { setCctpAmount(e.target.value); setInputError(null); }}
+                  placeholder="送る USDC 量 (Sepolia)" min="0"
                   className="w-full bg-gray-950 border border-gray-800 rounded px-3 py-2 text-gray-300 text-xs focus:outline-none focus:border-purple-700" />
                 {cctpStep && (
                   <div className={`rounded p-2 text-[11px] border ${
@@ -366,7 +403,7 @@ export default function VaultPage() {
                   className="w-full py-3 bg-purple-950 hover:bg-purple-900 border border-purple-800 text-purple-400 rounded text-xs font-bold tracking-widest disabled:opacity-40 transition-colors">
                   {cctpLoading ? "処理中..." : "🌉 他チェーンからDeposit (CCTP)"}
                 </button>
-                <div className="text-gray-800 text-[10px]">※ 実行時に秘密鍵の入力が必要です</div>
+                <div className="text-gray-700 text-[10px]">※ MetaMaskのみで署名します。秘密鍵の入力は不要です。</div>
               </div>
             )}
             {tab === "withdraw" && (
@@ -378,7 +415,7 @@ export default function VaultPage() {
                     <span className="text-green-400 font-bold">{userValue?.toFixed(4) ?? "—"} USDC</span>
                   </div>
                 </div>
-                <button onClick={handleWithdrawAll} disabled={loading || !isConnected || (userValue ?? 0) <= 0}
+                <button onClick={handleWithdrawAll} disabled={loading || !isConnected || !onArcChain || (userValue ?? 0) <= 0}
                   className="w-full py-3 bg-red-950 hover:bg-red-900 border border-red-800 text-red-400 rounded text-xs font-bold tracking-widest disabled:opacity-40 transition-colors">
                   {loading ? "処理中..." : "⬆ 全額引き出す (Withdraw All)"}
                 </button>
