@@ -2,7 +2,7 @@ const { ethers } = require('ethers');
 const axios = require('axios');
 const fs = require('fs');
 
-const VAULT_ADDRESS = "0x07AD7bDE86371B5c28e0f0532fF52097d0D14162";
+const VAULT_ADDRESS = "0x41d4259e79b999b34ce2bAF62Bbe4E754140CA30";
 const RPC_URL = "https://rpc.testnet.arc.network";
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 
@@ -89,7 +89,7 @@ async function main() {
         console.log("📉 生産コスト圏内 + 恐怖！DCA 5% 実行");
         console.log("   購入額: " + ethers.formatUnits(buyAmt, 6) + " USDC");
 
-        if (buyAmt >= 1_000_000n) {
+        if (buyAmt >= 100_000n) {
           const tx = await vault.buyBTC();
           await tx.wait();
           console.log("✅ DCA 5% 完了:", tx.hash);
@@ -105,7 +105,7 @@ async function main() {
         console.log("📉 恐怖ゾーン DCA 2% 実行");
         console.log("   購入額: " + ethers.formatUnits(buyAmt, 6) + " USDC");
 
-        if (buyAmt >= 1_000_000n) {
+        if (buyAmt >= 100_000n) {
           const tx = await vault.buyBTC();
           await tx.wait();
           console.log("✅ DCA 2% 完了:", tx.hash);
