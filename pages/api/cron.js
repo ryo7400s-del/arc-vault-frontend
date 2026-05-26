@@ -27,7 +27,7 @@ const ERC20_ABI = [
 ];
 
 const VAULT_ABI = [
-  { name: "harvest", type: "function", stateMutability: "nonpayable",
+  { name: "executeArbitrage", type: "function", stateMutability: "nonpayable",
     inputs: [{ name: "direction", type: "uint8" },{ name: "amountIn", type: "uint256" },{ name: "minAmountOut", type: "uint256" }],
     outputs: [{ name: "amountOut", type: "uint256" }] },
   { name: "getVaultInfo", type: "function", stateMutability: "view",
@@ -130,7 +130,7 @@ export default async function handler(req, res) {
       l(`EURC残高 ${eurcInVault.toFixed(2)} → 強制売却 direction=1 amount=${Math.floor(sellAmount)}`);
 
       const tx = await walletClient.writeContract({
-        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
+        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
         args: [1, sellRaw, minOut],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
@@ -153,7 +153,7 @@ export default async function handler(req, res) {
     l(`harvest() direction=${decision.direction} amount=${decision.amountIn}...`);
 
     const tx = await walletClient.writeContract({
-      address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
+      address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
       args: [decision.direction, amountIn, minOut],
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
