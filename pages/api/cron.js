@@ -21,11 +21,6 @@ const CURVE_ABI = [
     outputs: [{ name: "", type: "uint256" }] },
 ];
 
-const ERC20_ABI = [
-  { name: "balanceOf", type: "function", stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }], outputs: [{ name: "", type: "uint256" }] },
-];
-
 const VAULT_ABI = [
   { name: "executeArbitrage", type: "function", stateMutability: "nonpayable",
     inputs: [{ name: "direction", type: "uint8" },{ name: "amountIn", type: "uint256" },{ name: "minAmountOut", type: "uint256" }],
@@ -44,39 +39,60 @@ const VAULT_ABI = [
     inputs: [], outputs: [{ name: "", type: "uint256" }] },
 ];
 
-async function askAI({ curveRate, usdcInVault, eurcInVault, spread }) {
-  const prompt = `Arbitrage AI on Arc Testnet. Gas paid in USDC.
+// EUR/USD 実勢レートをCoinGeckoから取得
+async function getEurUsdRate() {
+  try {
+    const res = await fetch(
+      "https://api.coingecko.com/api/v3/simple/price?ids=euro&vs_currencies=usd",
+      { headers: { "Accept": "application/json" } }
+    );
+    const data = await res.json();
+    const rate = data?.euro?.usd;
+    if (!rate) throw new Error("no rate");
+    return rate;
+  } catch(e) {
+    // フォールバック: 固定値
+    return 1.0800;
+  }
+}
+
+async function askAI({ curveRate, eurUsdRate, usdcInVault, eurcInVault, spread, spreadPct }) {
+  const prompt = `Arbitrage AI on Arc Testnet (Curve DEX only). Gas paid in USDC.
 
 Vault balances:
   USDC: ${usdcInVault} USDC
-  EURC: ${eurcInVault} EURC (in vault contract)
+  EURC: ${eurcInVault} EURC
 
-Curve rate: ${curveRate.toFixed(6)} USDC per EURC
-EUR/USD reference: ~1.0800
-Spread vs reference: ${(Math.abs(curveRate - 1.08) * 100).toFixed(4)}%
-Cross-spread: ${(spread * 100).toFixed(4)}%
+Curve pool rate:   ${curveRate.toFixed(6)} USDC per EURC
+EUR/USD real rate: ${eurUsdRate.toFixed(6)} (from CoinGecko)
+Spread:            ${spreadPct.toFixed(4)}%
 
-Rules:
-1. If EURC in vault > 5: ALWAYS sell EURC->USDC first (direction=1), use 95% of EURC balance
-2. If EURC < 5 and curve rate > 1.082: buy EURC (direction=0), use 30% of USDC
-3. If EURC < 5 and curve rate < 1.078: sell remaining EURC if any (direction=1)
-4. Otherwise: WAIT
+Decision rules:
+1. If EURC in vault > 5: ALWAYS sell EURC->USDC (direction=1), use 90% of EURC
+2. If spread > 0.5% and curveRate < eurUsdRate: buy EURC (direction=0), use 25% of USDC (EURC underpriced on Curve)
+3. If spread > 0.5% and curveRate > eurUsdRate: sell EURC (direction=1) if eurcInVault > 0
+4. If spread < 0.3%: WAIT (not profitable after fees)
 
-Respond JSON only:
-{"action":"HARVEST","direction":0,"amountIn":10,"minAmountOut":9,"reason":"buying EURC cheap"}
+Respond JSON only, no explanation outside JSON:
+{"action":"HARVEST","direction":0,"amountIn":12,"reason":"EURC underpriced 0.8%"}
 or
-{"action":"WAIT","reason":"no opportunity"}`;
+{"action":"WAIT","reason":"spread too small"}`;
 
   try {
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.GROQ_API_KEY}` },
-      body: JSON.stringify({ model: "llama-3.1-8b-instant", max_tokens: 256,
-        messages: [{ role: "user", content: prompt }] }),
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        max_tokens: 128,
+        temperature: 0,
+        messages: [{ role: "user", content: prompt }],
+      }),
     });
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content || "{}";
-    const match = text.match(/{[^}]+}/); return match ? JSON.parse(match[0]) : { action: "WAIT", reason: "no JSON found" };
+    const match = text.match(/{[^}]+}/);
+    return match ? JSON.parse(match[0]) : { action: "WAIT", reason: "no JSON found" };
   } catch(e) {
     return { action: "WAIT", reason: "AI error: " + e.message };
   }
@@ -99,10 +115,11 @@ export default async function handler(req, res) {
     const publicClient = createPublicClient({ chain: arcTestnet, transport: http() });
     const walletClient = createWalletClient({ account, chain: arcTestnet, transport: http() });
 
-    // Vault 情報取得
-    const [vaultInfo, eurcRaw] = await Promise.all([
+    // Vault情報 + EUR/USDレート を並列取得
+    const [vaultInfo, eurcRaw, eurUsdRate] = await Promise.all([
       publicClient.readContract({ address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "getVaultInfo" }),
       publicClient.readContract({ address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "getEURCBalance" }),
+      getEurUsdRate(),
     ]);
 
     const totalAssets = parseFloat(formatUnits(vaultInfo[0], 6));
@@ -111,23 +128,26 @@ export default async function handler(req, res) {
     const eurcInVault = parseFloat(formatUnits(eurcRaw, 6));
 
     l(`Vault: USDC=${totalAssets.toFixed(2)} EURC=${eurcInVault.toFixed(2)} profit=${totalProfit.toFixed(4)} trades=${totalTrades}`);
+    l(`EUR/USD (CoinGecko): ${eurUsdRate.toFixed(6)}`);
 
-    // Curve レート取得
+    // Curveレート取得 (1000 USDC → EURC)
     const amtIn = parseUnits("1000", 6);
     const dyR = await publicClient.readContract({
       address: ADDR.CURVE, abi: CURVE_ABI, functionName: "get_dy",
       args: [0n, 1n, amtIn],
     });
     const curveRate = 1000 / parseFloat(formatUnits(dyR, 6));
-    const spread = Math.abs(curveRate - 1.08);
-    l(`Curve: ${curveRate.toFixed(6)} USDC/EURC | spread vs ref: ${(spread*100).toFixed(4)}%`);
+    const spread    = curveRate - eurUsdRate;
+    const spreadPct = Math.abs(spread) / eurUsdRate * 100;
 
-    // EURC が残っていたら強制的に売る
+    l(`Curve: ${curveRate.toFixed(6)} USDC/EURC | EUR/USD: ${eurUsdRate.toFixed(6)} | spread: ${spread.toFixed(6)} (${spreadPct.toFixed(4)}%)`);
+
+    // EURC残りがあれば強制売却
     if (eurcInVault > 5) {
-      const sellAmount = eurcInVault * 0.95;
-      const sellRaw    = parseUnits(Math.floor(sellAmount).toString(), 6);
-      const minOut     = parseUnits((Math.floor(sellAmount) * curveRate * 0.98).toFixed(0), 6);
-      l(`EURC残高 ${eurcInVault.toFixed(2)} → 強制売却 direction=1 amount=${Math.floor(sellAmount)}`);
+      const sellAmount = Math.floor(eurcInVault * 0.90);
+      const sellRaw    = parseUnits(sellAmount.toString(), 6);
+      const minOut     = parseUnits(Math.floor(sellAmount * curveRate * 0.97).toString(), 6);
+      l(`EURC残高 ${eurcInVault.toFixed(2)} → 強制売却 amount=${sellAmount}`);
 
       const tx = await walletClient.writeContract({
         address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
@@ -139,18 +159,22 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: "HARVEST", direction: 1, tx, log });
     }
 
-    // AI 判断
-    const decision = await askAI({ curveRate, usdcInVault: totalAssets.toFixed(2), eurcInVault: eurcInVault.toFixed(2), spread });
+    // AI判断
+    const decision = await askAI({
+      curveRate, eurUsdRate,
+      usdcInVault: totalAssets.toFixed(2),
+      eurcInVault: eurcInVault.toFixed(2),
+      spread, spreadPct,
+    });
     l(`AI: ${decision.action} - ${decision.reason}`);
 
     if (decision.action !== "HARVEST" || totalAssets < 1) {
       return res.status(200).json({ status: "WAIT", log, reason: decision.reason });
     }
 
-    // harvest 実行
     const amountIn = parseUnits(Math.floor(decision.amountIn).toString(), 6);
     const minOut   = parseUnits(Math.floor(decision.amountIn * 0.95).toString(), 6);
-    l(`harvest() direction=${decision.direction} amount=${decision.amountIn}...`);
+    l(`executeArbitrage() direction=${decision.direction} amount=${decision.amountIn}...`);
 
     const tx = await walletClient.writeContract({
       address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
