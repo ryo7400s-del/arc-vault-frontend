@@ -149,7 +149,7 @@ export default async function handler(req, res) {
 
     // harvest 実行
     const amountIn = parseUnits(Math.floor(decision.amountIn).toString(), 6);
-    const minOut   = parseUnits(Math.floor(decision.minAmountOut).toString(), 6);
+    const minOut   = parseUnits(Math.floor(decision.amountIn * 0.95).toString(), 6);
     l(`harvest() direction=${decision.direction} amount=${decision.amountIn}...`);
 
     const tx = await walletClient.writeContract({
