@@ -22,7 +22,7 @@ const CURVE_ABI = [
 ];
 
 const VAULT_ABI = [
-  { name: "executeArbitrage", type: "function", stateMutability: "nonpayable",
+  { name: "harvest", type: "function", stateMutability: "nonpayable",
     inputs: [{ name: "direction", type: "uint8" },{ name: "amountIn", type: "uint256" },{ name: "minAmountOut", type: "uint256" }],
     outputs: [{ name: "amountOut", type: "uint256" }] },
   { name: "getVaultInfo", type: "function", stateMutability: "view",
@@ -150,7 +150,7 @@ export default async function handler(req, res) {
       l(`EURC残高 ${eurcInVault.toFixed(2)} → 強制売却 amount=${sellAmount}`);
 
       const tx = await walletClient.writeContract({
-        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
+        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
         args: [1, sellRaw, minOut],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
@@ -166,7 +166,7 @@ export default async function handler(req, res) {
       const minOut   = parseUnits(Math.floor(useAmount * 0.95).toString(), 6);
       l(`HARVEST: EURC割安 spread=${spreadPct.toFixed(4)}% direction=0 amount=${useAmount}`);
       const tx = await walletClient.writeContract({
-        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
+        address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
         args: [0, amountIn, minOut],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
@@ -193,7 +193,7 @@ export default async function handler(req, res) {
     l(`executeArbitrage() direction=${decision.direction} amount=${decision.amountIn}...`);
 
     const tx = await walletClient.writeContract({
-      address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "executeArbitrage",
+      address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
       args: [decision.direction, amountIn, minOut],
     });
     const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
