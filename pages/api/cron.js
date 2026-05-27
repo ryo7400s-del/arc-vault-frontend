@@ -39,19 +39,25 @@ const VAULT_ABI = [
     inputs: [], outputs: [{ name: "", type: "uint256" }] },
 ];
 
-// EUR/USD 実勢レートをCoinGeckoから取得
+// Synthra Pool slot0 からEURC/USDCレートを取得
 async function getEurUsdRate() {
   try {
-    const res = await fetch(
-      "https://api.exchangerate-api.com/v4/latest/EUR",
-      { headers: { "Accept": "application/json" } }
-    );
+    const res = await fetch("https://rpc.testnet.arc.network", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1, method: "eth_call",
+        params: [{ to: "0xc4abb91884094972fc6634c0d91bb9f9332277f1", data: "0x3850c7bd" }, "latest"]
+      })
+    });
     const data = await res.json();
-    const rate = data?.rates?.USD;
-    if (!rate) throw new Error("no rate");
-    return rate;
+    const sqrtPriceX96 = BigInt("0x" + data.result.slice(2, 66));
+    const Q96 = BigInt(2) ** BigInt(96);
+    const price = Number(sqrtPriceX96 * sqrtPriceX96) / Number(Q96 * Q96);
+    const usdcPerEurc = 1 / price;
+    if (!usdcPerEurc || usdcPerEurc < 0.5 || usdcPerEurc > 2) throw new Error("invalid rate");
+    return usdcPerEurc;
   } catch(e) {
-    // フォールバック: 固定値
     return 1.0800;
   }
 }
