@@ -168,10 +168,10 @@ export default async function handler(req, res) {
     // スプレッドで直接判断（AIより確実）
     if (spreadPct > 0.3 && totalAssets >= 1) {
       const direction = curveRate > eurUsdRate ? 1 : 0;
-      const useAmount = direction === 0 ? Math.floor(totalAssets * 0.25) : Math.floor(eurcInVault * 0.90);
+      const useAmount = direction === 0 ? Math.floor(totalAssets * 0.25) : Math.floor(eurcInVault * 0.90 * 1e6) / 1e6;
       if (useAmount <= 0) { l("SKIP: EURC残高なし"); return res.status(200).json({ status: "WAIT", log, reason: "no EURC to sell" }); }
-      const amountIn = parseUnits(useAmount.toString(), 6);
-      const minOut   = parseUnits(Math.floor(useAmount * 0.95).toString(), 6);
+      const amountIn = parseUnits(useAmount.toFixed(6), 6);
+      const minOut = parseUnits((useAmount * 0.95).toFixed(6), 6);
       l(`HARVEST: direction=${direction} spread=${spreadPct.toFixed(4)}% direction=0 amount=${useAmount}`);
       const tx = await walletClient.writeContract({
         address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
