@@ -166,19 +166,20 @@ export default async function handler(req, res) {
     }
 
     // スプレッドで直接判断（AIより確実）
-    if (spreadPct > 0.3 && curveRate < eurUsdRate && totalAssets >= 1) {
-      const useAmount = Math.floor(totalAssets * 0.25);
+    if (spreadPct > 0.3 && totalAssets >= 1) {
+      const direction = curveRate > eurUsdRate ? 1 : 0;
+      const useAmount = Math.floor(direction === 0 ? totalAssets * 0.25 : 1);
       const amountIn = parseUnits(useAmount.toString(), 6);
       const minOut   = parseUnits(Math.floor(useAmount * 0.95).toString(), 6);
-      l(`HARVEST: EURC割安 spread=${spreadPct.toFixed(4)}% direction=0 amount=${useAmount}`);
+      l(`HARVEST: direction=${direction} spread=${spreadPct.toFixed(4)}% direction=0 amount=${useAmount}`);
       const tx = await walletClient.writeContract({
         address: ADDR.ARB_VAULT, abi: VAULT_ABI, functionName: "harvest",
-        args: [0, amountIn, minOut],
+        args: [direction, amountIn, minOut],
       });
       const receipt = await publicClient.waitForTransactionReceipt({ hash: tx });
       l(`TX: ${tx} status: ${receipt.status}`);
       l(`Explorer: https://testnet.arcscan.app/tx/${tx}`);
-      return res.status(200).json({ status: "HARVEST", direction: 0, tx, log });
+      return res.status(200).json({ status: "HARVEST", direction, tx, log });
     }
 
     // AI判断
