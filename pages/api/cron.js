@@ -43,11 +43,11 @@ const VAULT_ABI = [
 async function getEurUsdRate() {
   try {
     const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=euro&vs_currencies=usd",
+      "https://api.exchangerate-api.com/v4/latest/EUR",
       { headers: { "Accept": "application/json" } }
     );
     const data = await res.json();
-    const rate = data?.euro?.usd;
+    const rate = data?.rates?.USD;
     if (!rate) throw new Error("no rate");
     return rate;
   } catch(e) {
