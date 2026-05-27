@@ -166,7 +166,7 @@ export default async function handler(req, res) {
     }
 
     // スプレッドで直接判断（AIより確実）
-    if (spreadPct > 0.5 && curveRate < eurUsdRate && totalAssets >= 1) {
+    if (spreadPct > 0.3 && curveRate < eurUsdRate && totalAssets >= 1) {
       const useAmount = Math.floor(totalAssets * 0.25);
       const amountIn = parseUnits(useAmount.toString(), 6);
       const minOut   = parseUnits(Math.floor(useAmount * 0.95).toString(), 6);
