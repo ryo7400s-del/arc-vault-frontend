@@ -76,7 +76,7 @@ or
     });
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content || "{}";
-    return JSON.parse(text.replace(/```json|```/g,"").trim());
+    const match = text.match(/{[^}]+}/); return match ? JSON.parse(match[0]) : { action: "WAIT", reason: "no JSON found" };
   } catch(e) {
     return { action: "WAIT", reason: "AI error: " + e.message };
   }
